@@ -74,35 +74,63 @@ func New(db *sql.DB) *GoLink {
 }
 
 // Run installs and starts up the service.
-func (gl *GoLink) Run(ctx context.Context) error {
-	gl.install(ctx)
-	if err := gl.startUp(ctx); err != nil {
+func (gl *GoLink) Run(ctx context.Context, port int) error {
+	if err := gl.startUp(ctx, port); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (gl *GoLink) install(ctx context.Context) {
-	http.HandleFunc("/", gl.indexHandler)
-	http.HandleFunc("/create_golink", gl.createHandler)
-	http.HandleFunc("/golink/", gl.readHandler)
-	http.HandleFunc("/update_golink", gl.updateHandler)
-	http.HandleFunc("/delete_golink", gl.deleteHandler)
-	http.HandleFunc("/go", gl.goHandler)
-	http.HandleFunc("/go/", gl.goHandler)
-}
-
-func (gl *GoLink) startUp(ctx context.Context) error {
-	addr := fmt.Sprintf("localhost:%v", 10123)
-	log.Printf("Server listening on http://%v", addr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
+func (gl *GoLink) startUp(ctx context.Context, port int) error {
+	httpAddr := fmt.Sprintf("127.0.0.1:%v", port)
+	log.Printf("Server listening on http://%v", httpAddr)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", gl.indexHandler)
+	mux.HandleFunc("/create_golink", gl.createHandler)
+	mux.HandleFunc("/golink/", gl.readHandler)
+	mux.HandleFunc("/update_golink", gl.updateHandler)
+	mux.HandleFunc("/delete_golink", gl.deleteHandler)
+	mux.HandleFunc("/go", gl.goHandler)
+	mux.HandleFunc("/go/", gl.goHandler)
+	server := &http.Server{
+		Addr:    httpAddr,
+		Handler: gl.logRequestHandler(mux),
+	}
+	if err := server.ListenAndServe(); err != nil {
 		return fmt.Errorf("listen and serve failed: %v", err)
 	}
 	return nil
 }
 
+func (gl *GoLink) logRequestHandler(h http.Handler) http.Handler {
+	fn := func(resp http.ResponseWriter, req *http.Request) {
+		log.Printf("%+v", req)
+		h.ServeHTTP(resp, req)
+	}
+	return http.HandlerFunc(fn)
+}
+
 func (gl *GoLink) indexHandler(resp http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
+	p := req.URL.EscapedPath()
+	p = strings.TrimPrefix(p, "/")
+	if p != "" {
+		// Requests for go/name will map to p == "name" here, so we need to redirect.
+		link, found, err := gl.linkByName(ctx, p)
+		if err != nil {
+			log.Printf("Failed to lookup %q: %v", p, err)
+			http.Error(resp, fmt.Sprintf("Failed to lookup %q.", p), http.StatusInternalServerError)
+			return
+		}
+		if found {
+			http.Redirect(resp, req, link.Link, http.StatusTemporaryRedirect)
+			return
+		}
+		if !found {
+			http.NotFound(resp, req)
+			return
+		}
+	}
 	const query = "select name, url from links;"
 	rows, err := gl.db.QueryContext(ctx, query)
 	if err != nil {

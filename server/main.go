@@ -12,6 +12,7 @@ import (
 
 var (
 	dbPath = flag.String("db_path", "/tmp/golink.db", "Path to a sqlite database.")
+	port = flag.Int("port", 10123, "The port to listen on.")
 )
 
 func main() {
@@ -22,7 +23,7 @@ func main() {
 		log.Fatalln(err)
 	}
 	gl := service.New(db)
-	if err := gl.Run(ctx); err != nil {
+	if err := gl.Run(ctx, *port); err != nil {
 		log.Fatalln(err)
 	}
 }
