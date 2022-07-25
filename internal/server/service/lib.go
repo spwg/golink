@@ -88,6 +88,7 @@ func (gl *GoLink) install(ctx context.Context) {
 	http.HandleFunc("/golink/", gl.readHandler)
 	http.HandleFunc("/update_golink", gl.updateHandler)
 	http.HandleFunc("/delete_golink", gl.deleteHandler)
+	http.HandleFunc("/go", gl.goHandler)
 	http.HandleFunc("/go/", gl.goHandler)
 }
 
@@ -283,6 +284,10 @@ func (gl *GoLink) deleteHandler(resp http.ResponseWriter, req *http.Request) {
 func (gl *GoLink) goHandler(resp http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	p := req.URL.EscapedPath()
+	if p == "/go" || p == "/go/" {
+		http.Redirect(resp, req, "/", http.StatusTemporaryRedirect)
+		return
+	}
 	p = strings.TrimPrefix(p, "/")
 	split := strings.Split(p, "/")
 	if len(split) <= 1 {
