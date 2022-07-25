@@ -6,8 +6,8 @@ import (
 	"log"
 
 	_ "github.com/mattn/go-sqlite3" // sql driver
-	"github.com/spwg/golink/internal/server/datastore"
-	"github.com/spwg/golink/internal/server/service"
+	"github.com/spwg/golink/internal/datastore"
+	"github.com/spwg/golink/internal/service"
 )
 
 var (
