@@ -123,6 +123,7 @@ func (gl *GoLink) indexHandler(resp http.ResponseWriter, req *http.Request) {
 			return
 		}
 		if found {
+			log.Printf("Redirecting %q -> %q", req.URL.String(), link.Link)
 			http.Redirect(resp, req, link.Link, http.StatusTemporaryRedirect)
 			return
 		}
