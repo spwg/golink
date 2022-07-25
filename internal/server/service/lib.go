@@ -16,7 +16,7 @@ const (
 	indexPage = `<html>
 <body>
 <p><b>Create a new link</b></p>
-<form action="/new_golink" method="post">
+<form action="/create_golink" method="post">
 <label for="name">Link name:</label><br>
 <input required type="text" id="name" name="name"><br>
 <label for="link">Link</label><br>
@@ -31,10 +31,26 @@ const (
 </html>`
 	goLinkPage = `<html>
 <body>
+<p><b>Manage golink</b></p>
 <p>Name: {{.Name}}</p>
 <p>URL: <a href="/go/{{.Name}}">{{.Link}}</a></p>
+<p><b>Change golink</b></p>
+<form action="/update_golink" method="post">
+<label for="name">Link name:</label><br>
+<input required type="text" id="name" value={{.Name}} name="name"><br>
+<label for="link">Link</label><br>
+<input required type="url" id="link" value={{.Link}} name="link"><br>
+<input hidden type="text" id="old_name" name="old_name" value="{{.Name}}">
+<input type="submit" value="Change">
+</form>
+<p><b>Delete golink</b></p>
+<form action="/delete_golink" method="post">
+<input hidden type="text" id="name" value={{.Name}} name="name">
+<input type="submit", value="Delete">
+</form>
 </body>
 </html>`
+	blockChars = "/<>"
 )
 
 var (
@@ -123,6 +139,10 @@ func (gl *GoLink) createHandler(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, "The golink's name is missing, did you forget to write one?", http.StatusBadRequest)
 		return
 	}
+	if !validLinkName(name) {
+		http.Error(resp, fmt.Sprintf("The golink's name cannot contain any characters like %q.", blockChars), http.StatusBadRequest)
+		return
+	}
 	link := req.PostForm.Get("link")
 	if link == "" {
 		http.Error(resp, "The golink's link is missing, did you forget to include a URL?", http.StatusBadRequest)
@@ -176,9 +196,89 @@ func (gl *GoLink) readHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (gl *GoLink) updateHandler(resp http.ResponseWriter, req *http.Request) {}
+func (gl *GoLink) updateHandler(resp http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	if err := req.ParseForm(); err != nil {
+		log.Printf("Failed to parse form: %v", err)
+		http.Error(resp, "Failed to parse form.", http.StatusBadRequest)
+		return
+	}
+	oldName := req.PostForm.Get("old_name")
+	if oldName == "" {
+		http.Error(resp, "Invalid form: missing the old name of the link.", http.StatusBadRequest)
+		return
+	}
+	reqName := req.PostForm.Get("name")
+	if reqName == "" {
+		http.Error(resp, "Invalid form: missing the new name of the link.", http.StatusBadRequest)
+		return
+	}
+	if !validLinkName(reqName) {
+		http.Error(resp, fmt.Sprintf("The golink's name cannot contain any characters like %q.", blockChars), http.StatusBadRequest)
+		return
+	}
+	reqLink := req.PostForm.Get("link")
+	if reqLink == "" {
+		http.Error(resp, "Invalid form: missing the link.", http.StatusBadRequest)
+		return
+	}
+	if _, found, err := gl.linkByName(ctx, oldName); err != nil {
+		log.Printf("Failed to lookup name=%q: %v", oldName, err)
+		http.Error(resp, fmt.Sprintf("Failed to lookup link %q.", oldName), http.StatusInternalServerError)
+		return
+	} else if found {
+		http.Error(resp, fmt.Sprintf("Link for %q already exists.", oldName), http.StatusBadRequest)
+		return
+	}
+	// There is a race here between checking that the new name doesn't exist the
+	// update, but the checks are really just for writing nicer messages for the
+	// user. The database will enforce that names are unique as a constraint.
+	if _, found, err := gl.linkByName(ctx, reqName); err != nil {
+		log.Printf("Failed to lookup name=%q: %v", reqName, err)
+		http.Error(resp, fmt.Sprintf("Failed to lookup link %q.", reqName), http.StatusInternalServerError)
+		return
+	} else if found {
+		http.Error(resp, fmt.Sprintf("Link for %q already exists.", reqName), http.StatusBadRequest)
+		return
+	}
+	const query = "update links set name = ?, url = ? where name = ?;"
+	if _, err := gl.db.ExecContext(ctx, query, reqName, reqLink, oldName); err != nil {
+		log.Printf("Failed to update link name=%q to name=%q link=%q: %v", oldName, reqName, reqLink, err)
+		http.Error(resp, fmt.Sprintf("Failed to update link name=%q", oldName), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(resp, req, "/golink/"+reqName, http.StatusTemporaryRedirect)
+}
 
-func (gl *GoLink) deleteHandler(resp http.ResponseWriter, req *http.Request) {}
+func (gl *GoLink) deleteHandler(resp http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	if req.Method == "GET" {
+		http.Error(resp, "GET method not supported.", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := req.ParseForm(); err != nil {
+		http.Error(resp, "Failed to parse form.", http.StatusBadRequest)
+		return
+	}
+	name := req.PostForm.Get("name")
+	_, found, err := gl.linkByName(ctx, name)
+	if err != nil {
+		log.Printf("Failed to lookup name=%q: %v", name, err)
+		http.Error(resp, fmt.Sprintf("Failed to lookup %q.", name), http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.NotFound(resp, req)
+		return
+	}
+	const query = "delete from links where name=?;"
+	if _, err := gl.db.ExecContext(ctx, query, name); err != nil {
+		log.Printf("Failed to delete name=%q: %v", name, err)
+		http.Error(resp, "Failed to delete %q.", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(resp, req, "/", http.StatusTemporaryRedirect)
+}
 
 func (gl *GoLink) goHandler(resp http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
@@ -214,4 +314,8 @@ func (gl *GoLink) linkByName(ctx context.Context, name string) (*golink, bool, e
 		return nil, false, err
 	}
 	return &golink{name, link}, true, nil
+}
+
+func validLinkName(name string) bool {
+	return !strings.Contains(name, blockChars)
 }
