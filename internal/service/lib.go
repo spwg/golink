@@ -104,8 +104,9 @@ func (gl *GoLink) startUp(ctx context.Context, addr string) error {
 
 func (gl *GoLink) logRequestHandler(h http.Handler) http.Handler {
 	fn := func(resp http.ResponseWriter, req *http.Request) {
-		log.Printf("%+v", req)
+		log.Printf("Request: %+v", req)
 		h.ServeHTTP(resp, req)
+		log.Printf("Response: %+v", resp)
 	}
 	return http.HandlerFunc(fn)
 }
