@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"strings"
 )
 
@@ -94,7 +95,7 @@ func (gl *GoLink) startUp(ctx context.Context, addr string) error {
 	mux.HandleFunc("/go/", gl.goHandler)
 	server := &http.Server{
 		Addr:    addr,
-		Handler: gl.logRequestHandler(mux),
+		Handler: logHandler(mux),
 	}
 	if err := server.ListenAndServe(); err != nil {
 		return fmt.Errorf("listen and serve failed: %v", err)
@@ -102,11 +103,15 @@ func (gl *GoLink) startUp(ctx context.Context, addr string) error {
 	return nil
 }
 
-func (gl *GoLink) logRequestHandler(h http.Handler) http.Handler {
+func logHandler(h http.Handler) http.Handler {
 	fn := func(resp http.ResponseWriter, req *http.Request) {
-		log.Printf("Request: %+v", req)
+		b, err := httputil.DumpRequest(req, true)
+		if err != nil {
+			http.Error(resp, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		log.Printf("%s\n", b)
 		h.ServeHTTP(resp, req)
-		log.Printf("Response: %+v", resp)
 	}
 	return http.HandlerFunc(fn)
 }
