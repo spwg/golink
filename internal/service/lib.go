@@ -109,7 +109,7 @@ func logHandler(h http.Handler) http.Handler {
 			http.Error(resp, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Printf("%s\n", b)
+		log.Printf("%q\n", b)
 		recorder := httptest.NewRecorder()
 		h.ServeHTTP(resp, req)
 		b, err = httputil.DumpResponse(recorder.Result(), true)
@@ -117,7 +117,7 @@ func logHandler(h http.Handler) http.Handler {
 			log.Printf("Failed to log http request: %v", err)
 			return
 		}
-		log.Printf("%s\n", b)
+		log.Printf("%q\n", b)
 	}
 	return http.HandlerFunc(fn)
 }
