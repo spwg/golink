@@ -48,7 +48,7 @@ func Create(ctx context.Context, db *sql.DB, name, address string) error {
 		return ErrAlreadyExists
 	}
 	query := "insert into links (name, url) values (?, ?);"
-	if _, err := db.ExecContext(ctx, query, name, u); err != nil {
+	if _, err := db.ExecContext(ctx, query, name, u.String()); err != nil {
 		return fmt.Errorf("failed to create new record in the database: %w", err)
 	}
 	return nil
