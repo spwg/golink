@@ -9,8 +9,12 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"net/http/httputil"
+	"net/url"
 	"strings"
+
+	"github.com/spwg/golink/internal/link"
 )
 
 const (
@@ -64,11 +68,6 @@ type GoLink struct {
 	db *sql.DB
 }
 
-type golink struct {
-	Name string
-	Link string
-}
-
 // New creates a *GoLink.
 func New(db *sql.DB) *GoLink {
 	return &GoLink{db}
@@ -111,7 +110,14 @@ func logHandler(h http.Handler) http.Handler {
 			return
 		}
 		log.Printf("%s\n", b)
+		recorder := httptest.NewRecorder()
 		h.ServeHTTP(resp, req)
+		b, err = httputil.DumpResponse(recorder.Result(), true)
+		if err != nil {
+			log.Printf("Failed to log http request: %v", err)
+			return
+		}
+		log.Printf("%s\n", b)
 	}
 	return http.HandlerFunc(fn)
 }
@@ -133,8 +139,8 @@ func (gl *GoLink) indexHandler(resp http.ResponseWriter, req *http.Request) {
 			return
 		}
 		if found {
-			log.Printf("Redirecting %q -> %q", req.URL.String(), link.Link)
-			http.Redirect(resp, req, link.Link, http.StatusTemporaryRedirect)
+			log.Printf("Redirecting %q -> %q", req.URL.String(), link.Link.String())
+			http.Redirect(resp, req, link.Link.String(), http.StatusTemporaryRedirect)
 			return
 		}
 		if !found {
@@ -149,18 +155,23 @@ func (gl *GoLink) indexHandler(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, "Failed to query all links in the database.", http.StatusInternalServerError)
 		return
 	}
-	var links []*golink
+	var links []*link.Record
 	for rows.Next() {
-		var name, url string
-		if err := rows.Scan(&name, &url); err != nil {
+		var name, address string
+		if err := rows.Scan(&name, &address); err != nil {
 			log.Printf("Failed to scan link: %v", err)
 			http.Error(resp, "Failed to query all links in the databse.", http.StatusInternalServerError)
 			return
 		}
-		links = append(links, &golink{name, url})
+		u, err := url.Parse(address)
+		if err != nil {
+			http.Error(resp, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		links = append(links, &link.Record{Name: name, Link: u})
 	}
 	if err := indexPageTemplate.Execute(resp, struct {
-		Links []*golink
+		Links []*link.Record
 	}{links}); err != nil {
 		http.Error(resp, "Internal server error.", http.StatusInternalServerError)
 		return
@@ -175,37 +186,27 @@ func (gl *GoLink) createHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 	ctx := req.Context()
 	name := req.PostForm.Get("name")
-	if name == "" {
-		http.Error(resp, "The golink's name is missing, did you forget to write one?", http.StatusBadRequest)
-		return
-	}
-	if !validLinkName(name) {
-		http.Error(resp, fmt.Sprintf("The golink's name cannot contain any characters like %q.", blockChars), http.StatusBadRequest)
-		return
-	}
-	link := req.PostForm.Get("link")
-	if link == "" {
-		http.Error(resp, "The golink's link is missing, did you forget to include a URL?", http.StatusBadRequest)
-		return
-	}
-	_, ok, err := gl.linkByName(ctx, name)
+	l := req.PostForm.Get("link")
+	err := link.Create(ctx, gl.db, name, l)
 	if err != nil {
-		log.Printf("Failed to query whether name=%q exists: %v", name, err)
-		http.Error(resp, "Failed to save the link in the database.", http.StatusInternalServerError)
+		switch err {
+		case link.ErrAlreadyExists:
+			msg := fmt.Sprintf("The golink %q already exists.", name)
+			http.Error(resp, msg, http.StatusConflict)
+			return
+		case link.ErrInvalidLinkName:
+			msg := fmt.Sprintf(`Invalid link name. Must not be "" or contain %q.`, link.BlockChars)
+			http.Error(resp, msg, http.StatusBadRequest)
+			return
+		case link.ErrUnparseableAddress:
+			msg := fmt.Sprintf("Invalid URL %q: not parseable.", l)
+			http.Error(resp, msg, http.StatusBadRequest)
+			return
+		}
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if ok {
-		msg := fmt.Sprintf("The golink %q already exists.", name)
-		http.Error(resp, msg, http.StatusConflict)
-		return
-	}
-	query := "insert into links (name, url) values (?, ?);"
-	if _, err := gl.db.ExecContext(ctx, query, name, link); err != nil {
-		log.Printf("Failed to insert name=%q link=%q in the database: %v", name, link, err)
-		http.Error(resp, "Failed to save the link in the database.", http.StatusInternalServerError)
-		return
-	}
-	log.Printf("Saved new link: %v -> %v", name, link)
+	log.Printf("Saved new link: %v -> %v", name, l)
 	http.Redirect(resp, req, "/golink/"+name, http.StatusSeeOther)
 }
 
@@ -219,18 +220,18 @@ func (gl *GoLink) readHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	name := split[1]
-	link, ok, err := gl.linkByName(ctx, name)
+	record, err := link.Read(ctx, gl.db, name)
 	if err != nil {
-		log.Printf("Query for name=%q failed: %v", name, err)
-		http.Error(resp, "Failed to lookup %q in the database.", http.StatusInternalServerError)
+		switch err {
+		case link.ErrNotFound:
+			http.NotFound(resp, req)
+			return
+		}
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if !ok {
-		http.NotFound(resp, req)
-		return
-	}
-	if err := goLinkPageTemplate.Execute(resp, link); err != nil {
-		log.Printf("Failed to execute golink page template for %q: %v", link, err)
+	if err := goLinkPageTemplate.Execute(resp, record); err != nil {
+		log.Printf("Failed to execute golink page template for %v: %v", record, err)
 		http.Error(resp, "Failed to create a page for the golink.", http.StatusInternalServerError)
 		return
 	}
@@ -253,38 +254,27 @@ func (gl *GoLink) updateHandler(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, "Invalid form: missing the new name of the link.", http.StatusBadRequest)
 		return
 	}
-	if !validLinkName(reqName) {
-		http.Error(resp, fmt.Sprintf("The golink's name cannot contain any characters like %q.", blockChars), http.StatusBadRequest)
-		return
-	}
 	reqLink := req.PostForm.Get("link")
 	if reqLink == "" {
 		http.Error(resp, "Invalid form: missing the link.", http.StatusBadRequest)
 		return
 	}
-	if _, found, err := gl.linkByName(ctx, oldName); err != nil {
-		log.Printf("Failed to lookup name=%q: %v", oldName, err)
-		http.Error(resp, fmt.Sprintf("Failed to lookup link %q.", oldName), http.StatusInternalServerError)
-		return
-	} else if found {
-		http.Error(resp, fmt.Sprintf("Link for %q already exists.", oldName), http.StatusBadRequest)
-		return
-	}
-	// There is a race here between checking that the new name doesn't exist the
-	// update, but the checks are really just for writing nicer messages for the
-	// user. The database will enforce that names are unique as a constraint.
-	if _, found, err := gl.linkByName(ctx, reqName); err != nil {
-		log.Printf("Failed to lookup name=%q: %v", reqName, err)
-		http.Error(resp, fmt.Sprintf("Failed to lookup link %q.", reqName), http.StatusInternalServerError)
-		return
-	} else if found {
-		http.Error(resp, fmt.Sprintf("Link for %q already exists.", reqName), http.StatusBadRequest)
-		return
-	}
-	const query = "update links set name = ?, url = ? where name = ?;"
-	if _, err := gl.db.ExecContext(ctx, query, reqName, reqLink, oldName); err != nil {
-		log.Printf("Failed to update link name=%q to name=%q link=%q: %v", oldName, reqName, reqLink, err)
-		http.Error(resp, fmt.Sprintf("Failed to update link name=%q", oldName), http.StatusBadRequest)
+	if err := link.Update(ctx, gl.db, oldName, reqName, reqLink); err != nil {
+		switch err {
+		case link.ErrAlreadyExists:
+			msg := fmt.Sprintf("Link for %q already exists.", reqName)
+			http.Error(resp, msg, http.StatusBadRequest)
+			return
+		case link.ErrInvalidLinkName:
+			msg := fmt.Sprintf(`Invalid link name %q. Must not be "" or contain %q.`, reqName, link.BlockChars)
+			http.Error(resp, msg, http.StatusBadRequest)
+			return
+		case link.ErrUnparseableAddress:
+			msg := fmt.Sprintf("Invalid address %q: failed to parse.", reqLink)
+			http.Error(resp, msg, http.StatusBadRequest)
+			return
+		}
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(resp, req, "/golink/"+reqName, http.StatusTemporaryRedirect)
@@ -334,7 +324,7 @@ func (gl *GoLink) goHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	name := split[1]
-	link, ok, err := gl.linkByName(ctx, name)
+	l, ok, err := gl.linkByName(ctx, name)
 	if err != nil {
 		log.Printf("Failed to lookup name=%q: %v", name, err)
 		http.Error(resp, "Failed to lookup name %q.", http.StatusInternalServerError)
@@ -344,22 +334,22 @@ func (gl *GoLink) goHandler(resp http.ResponseWriter, req *http.Request) {
 		http.NotFound(resp, req)
 		return
 	}
-	http.Redirect(resp, req, link.Link, http.StatusTemporaryRedirect)
+	http.Redirect(resp, req, l.Link.String(), http.StatusTemporaryRedirect)
 }
 
-func (gl *GoLink) linkByName(ctx context.Context, name string) (*golink, bool, error) {
+func (gl *GoLink) linkByName(ctx context.Context, name string) (*link.Record, bool, error) {
 	const query = "select (url) from links where name=?;"
 	row := gl.db.QueryRowContext(ctx, query, name)
-	var link string
-	if err := row.Scan(&link); err != nil {
+	var s string
+	if err := row.Scan(&s); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, false, nil
 		}
 		return nil, false, err
 	}
-	return &golink{name, link}, true, nil
-}
-
-func validLinkName(name string) bool {
-	return !strings.Contains(name, blockChars)
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, false, err
+	}
+	return &link.Record{Name: name, Link: u}, true, nil
 }
