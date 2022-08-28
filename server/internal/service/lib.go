@@ -86,6 +86,7 @@ func (gl *GoLink) startUp(ctx context.Context, port int) error {
 	log.Printf("Server listening on http://%v", httpAddr)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", gl.indexHandler)
+	mux.HandleFunc("/favicon.ico", gl.faviconHandler)
 	mux.HandleFunc("/create_golink", gl.createHandler)
 	mux.HandleFunc("/golink/", gl.readHandler)
 	mux.HandleFunc("/update_golink", gl.updateHandler)
@@ -108,6 +109,10 @@ func (gl *GoLink) logRequestHandler(h http.Handler) http.Handler {
 		h.ServeHTTP(resp, req)
 	}
 	return http.HandlerFunc(fn)
+}
+
+func (gl *GoLink) faviconHandler(resp http.ResponseWriter, req *http.Request) {
+	http.NotFound(resp, req)
 }
 
 func (gl *GoLink) indexHandler(resp http.ResponseWriter, req *http.Request) {
