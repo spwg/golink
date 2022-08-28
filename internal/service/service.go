@@ -2,12 +2,15 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -17,50 +20,12 @@ import (
 	"github.com/spwg/golink/internal/link"
 )
 
-const (
-	indexPage = `<html>
-<body>
-<p><b>Create a new link</b></p>
-<form action="/create_golink" method="post">
-<label for="name">Link name:</label><br>
-<input required type="text" id="name" name="name"><br>
-<label for="link">Link</label><br>
-<input required type="url" id="link" name="link"><br>
-<input type="submit">
-</form>
-<p><b>Manage links</b></p>
-{{range .Links}}
-<a href="/golink/{{.Name}}">{{.Name}}</a><br>
-{{end}}
-</body>
-</html>`
-	goLinkPage = `<html>
-<body>
-<p><b>Manage golink</b></p>
-<p>Name: {{.Name}}</p>
-<p>URL: <a href="/go/{{.Name}}">{{.Link}}</a></p>
-<p><b>Change golink</b></p>
-<form action="/update_golink" method="post">
-<label for="name">Link name:</label><br>
-<input required type="text" id="name" value={{.Name}} name="name"><br>
-<label for="link">Link</label><br>
-<input required type="url" id="link" value={{.Link}} name="link"><br>
-<input hidden type="text" id="old_name" name="old_name" value="{{.Name}}">
-<input type="submit" value="Change">
-</form>
-<p><b>Delete golink</b></p>
-<form action="/delete_golink" method="post">
-<input hidden type="text" id="name" value={{.Name}} name="name">
-<input type="submit", value="Delete">
-</form>
-</body>
-</html>`
-	blockChars = "/<>"
-)
+//go:embed static
+var static embed.FS
 
 var (
-	indexPageTemplate  = template.Must(template.New("").Parse(indexPage))
-	goLinkPageTemplate = template.Must(template.New("").Parse(goLinkPage))
+	goLinkTemplate = template.Must(template.ParseFS(static, "static/golink.tmpl.html", "static/base.tmpl.html", "static/nav.tmpl.html"))
+	indexTemplate  = template.Must(template.ParseFS(static, "static/index.tmpl.html", "static/base.tmpl.html", "static/nav.tmpl.html"))
 )
 
 // GoLink is a service for shortened links.
@@ -74,15 +39,15 @@ func New(db *sql.DB) *GoLink {
 }
 
 // Run installs and starts up the service.
-func (gl *GoLink) Run(ctx context.Context, addr string) error {
-	if err := gl.startUp(ctx, addr); err != nil {
+func (gl *GoLink) Run(ctx context.Context, l net.Listener) error {
+	if err := gl.startUp(ctx, l); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (gl *GoLink) startUp(ctx context.Context, addr string) error {
-	log.Printf("Server listening on %s", addr)
+func (gl *GoLink) startUp(ctx context.Context, l net.Listener) error {
+	log.Printf("Server listening on %s", l.Addr())
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", gl.indexHandler)
 	mux.HandleFunc("/favicon.ico", gl.faviconHandler)
@@ -93,10 +58,18 @@ func (gl *GoLink) startUp(ctx context.Context, addr string) error {
 	mux.HandleFunc("/go", gl.goHandler)
 	mux.HandleFunc("/go/", gl.goHandler)
 	server := &http.Server{
-		Addr:    addr,
 		Handler: logHandler(mux),
 	}
-	if err := server.ListenAndServe(); err != nil {
+	go func() {
+		<-ctx.Done()
+		if err := server.Shutdown(context.Background()); err != nil {
+			log.Printf("%v", err)
+		}
+	}()
+	if err := http.Serve(l, server.Handler); err != nil {
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
 		return fmt.Errorf("listen and serve failed: %v", err)
 	}
 	return nil
@@ -147,6 +120,7 @@ func (gl *GoLink) indexHandler(resp http.ResponseWriter, req *http.Request) {
 			http.NotFound(resp, req)
 			return
 		}
+		return
 	}
 	const query = "select name, url from links;"
 	rows, err := gl.db.QueryContext(ctx, query)
@@ -170,10 +144,10 @@ func (gl *GoLink) indexHandler(resp http.ResponseWriter, req *http.Request) {
 		}
 		links = append(links, &link.Record{Name: name, Link: u})
 	}
-	if err := indexPageTemplate.Execute(resp, struct {
+	if err := indexTemplate.ExecuteTemplate(resp, "index.tmpl.html", struct {
 		Links []*link.Record
 	}{links}); err != nil {
-		http.Error(resp, "Internal server error.", http.StatusInternalServerError)
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
@@ -230,10 +204,19 @@ func (gl *GoLink) readHandler(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := goLinkPageTemplate.Execute(resp, record); err != nil {
-		log.Printf("Failed to execute golink page template for %v: %v", record, err)
-		http.Error(resp, "Failed to create a page for the golink.", http.StatusInternalServerError)
+	var b bytes.Buffer
+	type data struct {
+		Name    string
+		Address string
+	}
+	d := &data{record.Name, record.Link.String()}
+	if err := goLinkTemplate.ExecuteTemplate(&b, "golink.tmpl.html", d); err != nil {
+		log.Printf("%v\n", err)
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if _, err := resp.Write(b.Bytes()); err != nil {
+		log.Printf("%v\n", err)
 	}
 }
 

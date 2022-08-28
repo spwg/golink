@@ -1,0 +1,22 @@
+{{template "base" .}}
+{{define "title"}}{{.Name}}{{end}}
+
+{{define "main"}}
+<p><b>Manage golink</b></p>
+<p>Name: {{.Name}}</p>
+<p>URL: <a href="/go/{{.Name}}">{{.Address}}</a></p>
+<p><b>Change golink</b></p>
+<form action="/update_golink" method="post">
+    <label for="name">Link name:</label><br>
+    <input required type="text" id="name" value={{.Name}} name="name"><br>
+    <label for="link">Link</label><br>
+    <input required type="url" id="link" value={{.Address}} name="link"><br>
+    <input hidden type="text" id="old_name" name="old_name" value="{{.Name}}">
+    <input type="submit" value="Change">
+</form>
+<p><b>Delete golink</b></p>
+<form action="/delete_golink" method="post">
+    <input hidden type="text" id="name" value={{.Name}} name="name">
+    <input type="submit" , value="Delete">
+</form>
+{{end}}

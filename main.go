@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 
@@ -19,7 +20,7 @@ var (
 	port   = flag.Int("port", 10123, "The port to listen on. Override with the PORT env var.")
 )
 
-//go:embed schema/golink.sql
+//go:embed internal/schema/golink.sql
 var schema string
 
 func main() {
@@ -43,7 +44,11 @@ func run(ctx context.Context) error {
 		}
 		port = &p
 	}
-	return gl.Run(ctx, fmt.Sprintf(":%d", *port))
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		return err
+	}
+	return gl.Run(ctx, l)
 }
 
 func init() {
