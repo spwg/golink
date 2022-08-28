@@ -74,16 +74,15 @@ func New(db *sql.DB) *GoLink {
 }
 
 // Run installs and starts up the service.
-func (gl *GoLink) Run(ctx context.Context, port int) error {
-	if err := gl.startUp(ctx, port); err != nil {
+func (gl *GoLink) Run(ctx context.Context, addr string) error {
+	if err := gl.startUp(ctx, addr); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (gl *GoLink) startUp(ctx context.Context, port int) error {
-	httpAddr := fmt.Sprintf("127.0.0.1:%v", port)
-	log.Printf("Server listening on http://%v", httpAddr)
+func (gl *GoLink) startUp(ctx context.Context, addr string) error {
+	log.Printf("Server listening on %s", addr)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", gl.indexHandler)
 	mux.HandleFunc("/favicon.ico", gl.faviconHandler)
@@ -94,7 +93,7 @@ func (gl *GoLink) startUp(ctx context.Context, port int) error {
 	mux.HandleFunc("/go", gl.goHandler)
 	mux.HandleFunc("/go/", gl.goHandler)
 	server := &http.Server{
-		Addr:    httpAddr,
+		Addr:    addr,
 		Handler: gl.logRequestHandler(mux),
 	}
 	if err := server.ListenAndServe(); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -42,7 +43,7 @@ func run(ctx context.Context) error {
 		}
 		port = &p
 	}
-	return gl.Run(ctx, *port)
+	return gl.Run(ctx, fmt.Sprintf(":%d", *port))
 }
 
 func init() {
