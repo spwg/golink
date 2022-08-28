@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"flag"
 	"log"
 
@@ -12,13 +13,16 @@ import (
 
 var (
 	dbPath = flag.String("db_path", "/tmp/golink.db", "Path to a sqlite database.")
-	port = flag.Int("port", 10123, "The port to listen on.")
+	port   = flag.Int("port", 10123, "The port to listen on.")
 )
+
+//go:embed schema/golink.sql
+var schema string
 
 func main() {
 	flag.Parse()
 	ctx := context.Background()
-	db, err := datastore.SQLite(ctx, *dbPath)
+	db, err := datastore.SQLite(ctx, *dbPath, schema)
 	if err != nil {
 		log.Fatalln(err)
 	}
