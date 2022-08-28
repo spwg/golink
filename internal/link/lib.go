@@ -98,9 +98,20 @@ func Update(ctx context.Context, db *sql.DB, oldName, newName, address string) e
 	return nil
 }
 
+// Delete removes an entry from the database.
 func Delete(ctx context.Context, db *sql.DB, name string) error {
-	// TODO(spencer): implement.
-	return fmt.Errorf("unimplemented")
+	_, found, err := linkByName(ctx, db, name)
+	if err != nil {
+		return fmt.Errorf("failed to delete %q: %w", name, err)
+	}
+	if !found {
+		return ErrNotFound
+	}
+	const query = "delete from links where name=?;"
+	if _, err := db.ExecContext(ctx, query, name); err != nil {
+		return fmt.Errorf("failed to execute delete statement: %w", err)
+	}
+	return nil
 }
 
 func linkByName(ctx context.Context, db *sql.DB, name string) (*Record, bool, error) {

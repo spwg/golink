@@ -291,20 +291,13 @@ func (gl *GoLink) deleteHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	name := req.PostForm.Get("name")
-	_, found, err := gl.linkByName(ctx, name)
-	if err != nil {
-		log.Printf("Failed to lookup name=%q: %v", name, err)
-		http.Error(resp, fmt.Sprintf("Failed to lookup %q.", name), http.StatusInternalServerError)
-		return
-	}
-	if !found {
-		http.NotFound(resp, req)
-		return
-	}
-	const query = "delete from links where name=?;"
-	if _, err := gl.db.ExecContext(ctx, query, name); err != nil {
-		log.Printf("Failed to delete name=%q: %v", name, err)
-		http.Error(resp, "Failed to delete %q.", http.StatusInternalServerError)
+	if err := link.Delete(ctx, gl.db, name); err != nil {
+		switch err {
+		case link.ErrNotFound:
+			http.NotFound(resp, req)
+			return
+		}
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(resp, req, "/", http.StatusTemporaryRedirect)
