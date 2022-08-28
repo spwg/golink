@@ -43,6 +43,7 @@ func run(ctx context.Context) error {
 			return err
 		}
 		port = &p
+		*dbPath = "/data/golink.db"
 	}
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
