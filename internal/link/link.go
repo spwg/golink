@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"html"
 	"net/url"
 	"strings"
 	"unicode"
@@ -75,7 +76,10 @@ func Read(ctx context.Context, db *sql.DB, name string) (*Record, error) {
 // url it redirects to is address.
 func Update(ctx context.Context, db *sql.DB, oldName, newName, address string) error {
 	if !ValidLinkName(newName) {
-		return ErrInvalidLinkName
+		return fmt.Errorf("link name %v is invalid: %w", newName, ErrInvalidLinkName)
+	}
+	if !ValidLinkName(oldName) {
+		return fmt.Errorf("link name %v is invalid: %w", oldName, ErrInvalidLinkName)
 	}
 	_, err := url.Parse(address)
 	if err != nil {
@@ -142,6 +146,9 @@ func linkByName(ctx context.Context, db *sql.DB, name string) (*Record, bool, er
 //
 // A name is invalid if it contains whitespace, contains any of BlockChars, or is the empty string.
 func ValidLinkName(name string) bool {
+	if html.EscapeString(name) != name {
+		return false
+	}
 	for _, c := range name {
 		if unicode.IsSpace(c) {
 			return false
