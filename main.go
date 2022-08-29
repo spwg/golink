@@ -32,11 +32,6 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	db, err := datastore.SQLite(ctx, *dbPath, schema)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	gl := service.New(db)
 	if os.Getenv("PORT") != "" {
 		p, err := strconv.Atoi(os.Getenv("PORT"))
 		if err != nil {
@@ -45,6 +40,11 @@ func run(ctx context.Context) error {
 		port = &p
 		*dbPath = "/data/golink.db"
 	}
+	db, err := datastore.SQLite(ctx, *dbPath, schema)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	gl := service.New(db)
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
 		return err
