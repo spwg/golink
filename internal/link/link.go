@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -132,5 +133,9 @@ func linkByName(ctx context.Context, db *sql.DB, name string) (*Record, bool, er
 }
 
 func ValidLinkName(name string) bool {
-	return name != "" && !strings.Contains(name, BlockChars)
+	trimmed := strings.TrimFunc(name, unicode.IsSpace)
+	noWhiteSpace := trimmed == name
+	notEmpty := name != ""
+	noBlockChars := !strings.Contains(name, BlockChars)
+	return notEmpty && noWhiteSpace && noBlockChars
 }
