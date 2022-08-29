@@ -54,6 +54,16 @@ func TestCreate(t *testing.T) {
 			address:  "http://example.com",
 		},
 		{
+			name:     "dashes ok",
+			linkName: "foo-foo",
+			address:  "http://example.com",
+		},
+		{
+			name:     "colons ok",
+			linkName: "foo:foo",
+			address:  "http://example.com",
+		},
+		{
 			name:     "escaped name invalid",
 			linkName: "<alert>console.log('hello');</alert>",
 			address:  "http://example.com",
