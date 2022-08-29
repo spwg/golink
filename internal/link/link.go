@@ -71,6 +71,9 @@ func Read(ctx context.Context, db *sql.DB, name string) (*Record, error) {
 // Update changes the record for oldName so that it's name is newName and the
 // url it redirects to is address.
 func Update(ctx context.Context, db *sql.DB, oldName, newName, address string) error {
+	if !ValidLinkName(newName) {
+		return ErrInvalidLinkName
+	}
 	_, err := url.Parse(address)
 	if err != nil {
 		return ErrUnparseableAddress
@@ -132,10 +135,14 @@ func linkByName(ctx context.Context, db *sql.DB, name string) (*Record, bool, er
 	return &Record{name, u}, true, nil
 }
 
+// ValidLinkName returns true if name is valid and false otherwise.
+//
+// A name is invalid if it contains whitespace, contains any of BlockChars, or is the empty string.
 func ValidLinkName(name string) bool {
-	trimmed := strings.TrimFunc(name, unicode.IsSpace)
-	noWhiteSpace := trimmed == name
-	notEmpty := name != ""
-	noBlockChars := !strings.Contains(name, BlockChars)
-	return notEmpty && noWhiteSpace && noBlockChars
+	for _, c := range name {
+		if unicode.IsSpace(c) {
+			return false
+		}
+	}
+	return name != "" && !strings.ContainsAny(name, BlockChars)
 }
