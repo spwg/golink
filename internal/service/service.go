@@ -200,6 +200,9 @@ func (gl *GoLink) readHandler(resp http.ResponseWriter, req *http.Request) {
 		case link.ErrNotFound:
 			http.NotFound(resp, req)
 			return
+		case link.ErrInvalidLinkName:
+			http.Error(resp, "Invalid link name.", http.StatusBadRequest)
+			return
 		}
 		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return

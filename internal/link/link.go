@@ -58,6 +58,9 @@ func Create(ctx context.Context, db *sql.DB, name, address string) error {
 // Read returns a *Record for the link with the given name.
 // Returns ErrNotFound when there's no corresponding record.
 func Read(ctx context.Context, db *sql.DB, name string) (*Record, error) {
+	if !ValidLinkName(name) {
+		return nil, ErrInvalidLinkName
+	}
 	r, found, err := linkByName(ctx, db, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read link %q: %w", name, err)
