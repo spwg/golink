@@ -30,12 +30,13 @@ var (
 
 // GoLink is a service for shortened links.
 type GoLink struct {
-	db *sql.DB
+	db       *sql.DB
+	hostName string
 }
 
 // New creates a *GoLink.
-func New(db *sql.DB) *GoLink {
-	return &GoLink{db}
+func New(db *sql.DB, hostName string) *GoLink {
+	return &GoLink{db, hostName}
 }
 
 // Run installs and starts up the service.
@@ -57,8 +58,10 @@ func (gl *GoLink) startUp(ctx context.Context, l net.Listener) error {
 	mux.HandleFunc("/delete_golink", gl.deleteHandler)
 	mux.HandleFunc("/go", gl.goHandler)
 	mux.HandleFunc("/go/", gl.goHandler)
+	h := logHandler(mux)
+	h = gl.httpsRedirectHandler(h)
 	server := &http.Server{
-		Handler: logHandler(mux),
+		Handler: h,
 	}
 	go func() {
 		<-ctx.Done()
@@ -73,6 +76,23 @@ func (gl *GoLink) startUp(ctx context.Context, l net.Listener) error {
 		return fmt.Errorf("listen and serve failed: %v", err)
 	}
 	return nil
+}
+
+func (gl *GoLink) httpsRedirectHandler(h http.Handler) http.Handler {
+	f := func(resp http.ResponseWriter, req *http.Request) {
+		// http://go will hit this case.
+		if req.Host == "go" {
+			http.Redirect(resp, req, "https://"+gl.hostName+req.RequestURI, http.StatusMovedPermanently)
+			return
+		}
+		// http://golinkservice.com will hit this case.
+		if req.Header.Get("X-Forwarded-Proto") == "http" {
+			http.Redirect(resp, req, "https://"+gl.hostName+req.RequestURI, http.StatusMovedPermanently)
+			return
+		}
+		h.ServeHTTP(resp, req)
+	}
+	return http.HandlerFunc(f)
 }
 
 func logHandler(h http.Handler) http.Handler {

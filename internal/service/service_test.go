@@ -19,7 +19,7 @@ func TestIndex(t *testing.T) {
 	defer stop()
 	db := golinktest.NewDatabase(ctx, t)
 	l := golinktest.Listen(ctx, t)
-	go golinktest.RunServer(ctx, t, New(db), l)
+	go golinktest.RunServer(ctx, t, New(db, "example.com"), l)
 	time.Sleep(500 * time.Millisecond)
 	url := "http://" + l.Addr().String()
 	resp, err := http.Get(url)
@@ -44,7 +44,7 @@ func TestGoLinkPage(t *testing.T) {
 	db := golinktest.NewDatabase(ctx, t)
 	addEntry(ctx, t, db, "foo", "http://example.com")
 	l := golinktest.Listen(ctx, t)
-	go golinktest.RunServer(ctx, t, New(db), l)
+	go golinktest.RunServer(ctx, t, New(db, "example.com"), l)
 	time.Sleep(500 * time.Millisecond)
 	url := "http://" + l.Addr().String() + "/golink/foo"
 	resp, err := http.Get(url)
@@ -65,4 +65,66 @@ func TestGoLinkPage(t *testing.T) {
 	if !strings.Contains(s, "http://example.com") {
 		t.Errorf("Get(%q) returned page without %v, want the page to contain %q:\n%s", url, "http://example.com", "http://example.com", s)
 	}
+}
+
+func TestRedirect(t *testing.T) {
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	db := golinktest.NewDatabase(ctx, t)
+	addEntry(ctx, t, db, "foo", "http://example.com")
+	l := golinktest.Listen(ctx, t)
+	go golinktest.RunServer(ctx, t, New(db, "golinkservice.com"), l)
+	time.Sleep(500 * time.Millisecond)
+	t.Run("rewrite host", func(t *testing.T) {
+		addr := "http://" + l.Addr().String()
+		req, err := http.NewRequest(http.MethodGet, addr, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = "go"
+		http.DefaultClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		defer func() { http.DefaultClient.CheckRedirect = nil }()
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET %q returned err=%v, want nil", "http://go", err)
+		}
+		if got, want := resp.StatusCode, http.StatusMovedPermanently; got != want {
+			t.Errorf("GET %q returned code=%v, want %v", "http://go", got, want)
+		}
+		l, err := resp.Location()
+		if err != nil {
+			t.Fatalf("Location() returned err=%v, want nil", err)
+		}
+		if got, want := l.String(), "https://golinkservice.com/"; got != want {
+			t.Errorf("GET %q returned location=%q, want %q", "http://go", got, want)
+		}
+	})
+	t.Run("redirect http", func(t *testing.T) {
+		addr := "http://" + l.Addr().String()
+		req, err := http.NewRequest(http.MethodGet, addr, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("X-Forwarded-Proto", "http")
+		http.DefaultClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		defer func() { http.DefaultClient.CheckRedirect = nil }()
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET %q returned err=%v, want nil", addr, err)
+		}
+		if got, want := resp.StatusCode, http.StatusMovedPermanently; got != want {
+			t.Errorf("GET %q returned code=%v, want %v", addr, got, want)
+		}
+		l, err := resp.Location()
+		if err != nil {
+			t.Fatalf("Location() returned err=%v, want nil", err)
+		}
+		if got, want := l.String(), "https://golinkservice.com/"; got != want {
+			t.Errorf("GET %q returned location=%q, want %q", addr, got, want)
+		}
+	})
 }

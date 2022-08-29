@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	dbPath = flag.String("db_path", "/tmp/golink.db", "Path to a sqlite database.")
-	port   = flag.Int("port", 10123, "The port to listen on. Override with the PORT env var.")
+	hostName   string
+	dbPathFlag = flag.String("db_path", "/tmp/golink.db", "Path to a sqlite database.")
+	portFlag   = flag.Int("port", 10123, "The port to listen on. Override with the PORT env var.")
 )
 
 //go:embed internal/schema/golink.sql
@@ -32,20 +33,24 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	var hostName string
 	if os.Getenv("PORT") != "" {
 		p, err := strconv.Atoi(os.Getenv("PORT"))
 		if err != nil {
 			return err
 		}
-		port = &p
-		*dbPath = "/data/golink.db"
+		portFlag = &p
+		*dbPathFlag = "/data/golink.db"
+		hostName = "golinkservice.com"
+	} else {
+		hostName = fmt.Sprintf("localhost:%v", *portFlag)
 	}
-	db, err := datastore.SQLite(ctx, *dbPath, schema)
+	db, err := datastore.SQLite(ctx, *dbPathFlag, schema)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	gl := service.New(db)
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	gl := service.New(db, hostName)
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *portFlag))
 	if err != nil {
 		return err
 	}
