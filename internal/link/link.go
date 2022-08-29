@@ -35,7 +35,7 @@ type Record struct {
 
 // Create inserts a new record into the database for name and address.
 func Create(ctx context.Context, db *sql.DB, name, address string) error {
-	if !ValidLinkName(name) {
+	if !validLinkName(name) {
 		return ErrInvalidLinkName
 	}
 	u, err := url.Parse(address)
@@ -59,7 +59,7 @@ func Create(ctx context.Context, db *sql.DB, name, address string) error {
 // Read returns a *Record for the link with the given name.
 // Returns ErrNotFound when there's no corresponding record.
 func Read(ctx context.Context, db *sql.DB, name string) (*Record, error) {
-	if !ValidLinkName(name) {
+	if !validLinkName(name) {
 		return nil, ErrInvalidLinkName
 	}
 	r, found, err := linkByName(ctx, db, name)
@@ -75,10 +75,10 @@ func Read(ctx context.Context, db *sql.DB, name string) (*Record, error) {
 // Update changes the record for oldName so that it's name is newName and the
 // url it redirects to is address.
 func Update(ctx context.Context, db *sql.DB, oldName, newName, address string) error {
-	if !ValidLinkName(newName) {
+	if !validLinkName(newName) {
 		return fmt.Errorf("link name %v is invalid: %w", newName, ErrInvalidLinkName)
 	}
-	if !ValidLinkName(oldName) {
+	if !validLinkName(oldName) {
 		return fmt.Errorf("link name %v is invalid: %w", oldName, ErrInvalidLinkName)
 	}
 	_, err := url.Parse(address)
@@ -142,10 +142,10 @@ func linkByName(ctx context.Context, db *sql.DB, name string) (*Record, bool, er
 	return &Record{name, u}, true, nil
 }
 
-// ValidLinkName returns true if name is valid and false otherwise.
+// validLinkName returns true if name is valid and false otherwise.
 //
 // A name is invalid if it contains whitespace, contains any of BlockChars, or is the empty string.
-func ValidLinkName(name string) bool {
+func validLinkName(name string) bool {
 	if html.EscapeString(name) != name {
 		return false
 	}

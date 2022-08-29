@@ -32,7 +32,7 @@ func TestValidLinkName(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ValidLinkName(tc.linkName)
+			got := validLinkName(tc.linkName)
 			if got != tc.want {
 				t.Errorf("ValidLinkName(%q) returned %v, want %v", tc.linkName, got, tc.want)
 			}
