@@ -1,3 +1,5 @@
+[![Fly Deploy](https://github.com/spwg/golink/actions/workflows/main.yml/badge.svg)](https://github.com/spwg/golink/actions/workflows/main.yml)
+
 # golink
 
 This project is a link shortener that lets you put short keywords into Google
