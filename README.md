@@ -11,19 +11,23 @@ to run locally on port 10123.
 To run the server:
 
 1. `git clone github.com/spwg/golink`
-2. `sqlite3 /tmp/golink.db < schema/golink.sql`
-3. `cd server`
-4. `go run main.go` # runs on port 10123
+2. `go run main.go` # runs on port 10123
 
-To run the browser, if you're on MacOS: 
-1. Quit Chrome
-2. `/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --host-resolver-rules="MAP go localhost:10123"`
+To use the version in prod:
 
-To test it out:
-1. Open `go/`
-2. Create a link "g" with URL "https://google.com"
-3. Open a new tab
-4. Write `go/g` and hit enter
+1. Add an entry to `/etc/hosts`:
+
+```shell
+$ sudo echo "2a09:8280:1::1:66ae	go # golinkservice.com" >> /etc/hosts
+```
+
+2. Open `go/`
+3. Create a link "g" with URL "https://google.com"
+4. Open a new tab
+5. Write `go/g` and hit enter
+
+To use a local version, it's easiest to just go to the server directly because 
+otherwise you need to startup Google Chrome from the command line.
 
 ## Alternatives:
 
@@ -32,10 +36,3 @@ per [this issue](https://bugs.chromium.org/p/chromium/issues/detail?id=804945).
 Otherwise it would be nice to do a Chrome extension that could make `go/`
 resolve to a local server through DNS. That way you wouldn't need to start up a
 new Chrome browser.
-
-Another alternative would be to add a line to `/etc/hosts` that makes `go`
-resolve to a remote IP hosted by some cloud provider. Then the server could
-redirect you to there. The obvious downside of that is that you then have to pay
-the latency cost to reach the server, but also then this service would cost
-money to run and need to be productionized (security, users and authentication,
-etc.).
