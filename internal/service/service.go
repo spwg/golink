@@ -20,12 +20,12 @@ import (
 	"github.com/spwg/golink/internal/link"
 )
 
-//go:embed static
-var static embed.FS
-
 var (
+	//go:embed static
+	static         embed.FS
 	goLinkTemplate = template.Must(template.ParseFS(static, "static/golink.tmpl.html", "static/base.tmpl.html", "static/nav.tmpl.html"))
 	indexTemplate  = template.Must(template.ParseFS(static, "static/index.tmpl.html", "static/base.tmpl.html", "static/nav.tmpl.html"))
+	cssPage        = mustReadFile(static.ReadFile("static/site.css"))
 )
 
 // GoLink is a service for shortened links.
@@ -58,6 +58,7 @@ func (gl *GoLink) startUp(ctx context.Context, l net.Listener) error {
 	mux.HandleFunc("/delete_golink", gl.deleteHandler)
 	mux.HandleFunc("/go", gl.goHandler)
 	mux.HandleFunc("/go/", gl.goHandler)
+	mux.HandleFunc("/static/", gl.staticFileHandler)
 	server := &http.Server{
 		Handler: logHandler(gl.httpsRedirectHandler(mux)),
 	}
@@ -344,4 +345,18 @@ func (gl *GoLink) linkByName(ctx context.Context, name string) (*link.Record, bo
 		return nil, false, err
 	}
 	return &link.Record{Name: name, Link: u}, true, nil
+}
+
+func (gl *GoLink) staticFileHandler(resp http.ResponseWriter, req *http.Request) {
+	resp.Header().Add("Content-Type", "text/css")
+	if _, err := resp.Write(cssPage); err != nil {
+		log.Printf("Error writing css: %v", cssPage)
+	}
+}
+
+func mustReadFile(b []byte, err error) []byte {
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

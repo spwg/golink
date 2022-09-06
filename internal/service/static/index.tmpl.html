@@ -3,15 +3,17 @@
 
 {{define "main"}}
 <p><b>Create a new link</b></p>
-<form action="/create_golink" method="post">
-    <label for="name">Link name:</label><br>
-    <input required type="text" id="name" name="name"><br>
-    <label for="link">Link</label><br>
-    <input required type="url" id="link" name="link"><br>
+<form class="golink_form" action="/create_golink" method="post">
+    <label for="name">Link name:</label>
+    <input required type="text" id="name" name="name">
+    <label for="link">Link:</label>
+    <input required type="url" id="link" name="link">
     <input type="submit">
 </form>
+<div class="manage_links">
 <p><b>Manage links</b></p>
 {{range .Links}}
-<a href="/golink/{{.Name}}">{{.Name}}</a><br>
+<a href="/golink/{{.Name}}">{{.Name}}</a>
 {{end}}
+</div>
 {{end}}
