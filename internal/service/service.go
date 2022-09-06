@@ -312,11 +312,6 @@ func (gl *GoLink) deleteHandler(resp http.ResponseWriter, req *http.Request) {
 func (gl *GoLink) goHandler(resp http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	p := req.URL.EscapedPath()
-	if p == "/go" || p == "/go/" {
-		http.Redirect(resp, req, "/", http.StatusTemporaryRedirect)
-		return
-	}
-	p = strings.TrimPrefix(p, "/")
 	split := strings.Split(p, "/")
 	if len(split) <= 1 {
 		http.Error(resp, "Requests for the /go endpoint should look like /go/<name>.", http.StatusBadRequest)
