@@ -311,12 +311,18 @@ func (gl *GoLink) deleteHandler(resp http.ResponseWriter, req *http.Request) {
 func (gl *GoLink) goHandler(resp http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	p := req.URL.EscapedPath()
+	log.Printf("p = %q", p)
 	split := strings.Split(p, "/")
-	if len(split) <= 1 {
+	if len(split) <= 1 || len(split) > 3 {
 		http.Error(resp, "Requests for the /go endpoint should look like /go/<name>.", http.StatusBadRequest)
 		return
 	}
-	name := split[1]
+	if len(split) == 2 {
+		// The endpoint is /go.
+		http.NotFound(resp, req)
+		return
+	}
+	name := split[2]
 	l, ok, err := gl.linkByName(ctx, name)
 	if err != nil {
 		log.Printf("Failed to lookup name=%q: %v", name, err)
