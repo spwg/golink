@@ -58,10 +58,8 @@ func (gl *GoLink) startUp(ctx context.Context, l net.Listener) error {
 	mux.HandleFunc("/delete_golink", gl.deleteHandler)
 	mux.HandleFunc("/go", gl.goHandler)
 	mux.HandleFunc("/go/", gl.goHandler)
-	h := logHandler(mux)
-	h = gl.httpsRedirectHandler(h)
 	server := &http.Server{
-		Handler: h,
+		Handler: logHandler(gl.httpsRedirectHandler(mux)),
 	}
 	go func() {
 		<-ctx.Done()
