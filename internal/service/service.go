@@ -125,7 +125,7 @@ func (gl *GoLink) faviconHandler(resp http.ResponseWriter, req *http.Request) {
 
 func (gl *GoLink) indexHandler(resp http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
-	p := req.URL.EscapedPath()
+	p := escape(req.URL.EscapedPath())
 	p = strings.TrimPrefix(p, "/")
 	if p != "" {
 		// Requests for go/name will map to p == "name" here, so we need to redirect.
