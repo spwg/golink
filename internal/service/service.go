@@ -79,13 +79,15 @@ func (gl *GoLink) startUp(ctx context.Context, l net.Listener) error {
 
 func (gl *GoLink) httpsRedirectHandler(h http.Handler) http.Handler {
 	f := func(resp http.ResponseWriter, req *http.Request) {
-		// http://go will hit this case.
-		if req.Host == "go" {
+		switch {
+		case req.Host == "go" && req.URL.Path == "/": // http://go
 			http.Redirect(resp, req, "https://"+gl.hostName+req.RequestURI, http.StatusMovedPermanently)
 			return
-		}
-		// http://golinkservice.com will hit this case.
-		if req.Header.Get("X-Forwarded-Proto") == "http" {
+		case req.Host == "go" && req.URL.Path != "": // http://go/<name>
+			http.Redirect(resp, req, "https://"+gl.hostName+"/go/"+req.RequestURI, http.StatusMovedPermanently)
+			return
+		case req.Header.Get("X-Forwarded-Proto") == "http":
+			// The client did not connect to the proxy using https.
 			http.Redirect(resp, req, "https://"+gl.hostName+req.RequestURI, http.StatusMovedPermanently)
 			return
 		}
