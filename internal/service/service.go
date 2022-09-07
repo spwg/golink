@@ -26,6 +26,7 @@ var (
 	goLinkTemplate = template.Must(template.ParseFS(static, "static/golink.tmpl.html", "static/base.tmpl.html", "static/nav.tmpl.html"))
 	indexTemplate  = template.Must(template.ParseFS(static, "static/index.tmpl.html", "static/base.tmpl.html", "static/nav.tmpl.html"))
 	cssPage        = mustReadFile(static.ReadFile("static/site.css"))
+	docsPage       = template.Must(template.ParseFS(static, "static/docs.tmpl.html", "static/base.tmpl.html", "static/nav.tmpl.html"))
 )
 
 // GoLink is a service for shortened links.
@@ -59,6 +60,7 @@ func (gl *GoLink) startUp(ctx context.Context, l net.Listener) error {
 	mux.HandleFunc("/go", gl.goHandler)
 	mux.HandleFunc("/go/", gl.goHandler)
 	mux.HandleFunc("/static/", gl.staticFileHandler)
+	mux.HandleFunc("/docs", gl.docsHandler)
 	server := &http.Server{
 		Handler: logHandler(gl.httpsRedirectHandler(mux)),
 	}
@@ -358,6 +360,13 @@ func (gl *GoLink) staticFileHandler(resp http.ResponseWriter, req *http.Request)
 	resp.Header().Add("Content-Type", "text/css")
 	if _, err := resp.Write(cssPage); err != nil {
 		log.Printf("Error writing css: %v", cssPage)
+	}
+}
+
+func (gl *GoLink) docsHandler(resp http.ResponseWriter, req *http.Request) {
+	if err := docsPage.ExecuteTemplate(resp, "docs.tmpl.html", nil); err != nil {
+		http.Error(resp, "Unable to render docs.", http.StatusInternalServerError)
+		log.Printf("Unable to render docs: %v", err)
 	}
 }
 
