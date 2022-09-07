@@ -8,6 +8,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"html"
 	"html/template"
 	"log"
 	"net"
@@ -182,8 +183,8 @@ func (gl *GoLink) createHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	ctx := req.Context()
-	name := req.PostForm.Get("name")
-	l := req.PostForm.Get("link")
+	name := html.EscapeString(req.PostForm.Get("name"))
+	l := html.EscapeString(req.PostForm.Get("link"))
 	err := link.Create(ctx, gl.db, name, l)
 	if err != nil {
 		switch err {
@@ -253,17 +254,17 @@ func (gl *GoLink) updateHandler(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, "Failed to parse form.", http.StatusBadRequest)
 		return
 	}
-	oldName := req.PostForm.Get("old_name")
+	oldName := html.EscapeString(req.PostForm.Get("old_name"))
 	if oldName == "" {
 		http.Error(resp, "Invalid form: missing the old name of the link.", http.StatusBadRequest)
 		return
 	}
-	reqName := req.PostForm.Get("name")
+	reqName := html.EscapeString(req.PostForm.Get("name"))
 	if reqName == "" {
 		http.Error(resp, "Invalid form: missing the new name of the link.", http.StatusBadRequest)
 		return
 	}
-	reqLink := req.PostForm.Get("link")
+	reqLink := html.EscapeString(req.PostForm.Get("link"))
 	if reqLink == "" {
 		http.Error(resp, "Invalid form: missing the link.", http.StatusBadRequest)
 		return
@@ -299,7 +300,7 @@ func (gl *GoLink) deleteHandler(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, "Failed to parse form.", http.StatusBadRequest)
 		return
 	}
-	name := req.PostForm.Get("name")
+	name := html.EscapeString(req.PostForm.Get("name"))
 	if err := link.Delete(ctx, gl.db, name); err != nil {
 		switch err {
 		case link.ErrNotFound:
