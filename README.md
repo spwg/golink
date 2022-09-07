@@ -5,8 +5,7 @@
 This project is a link shortener that lets you put short keywords into Google
 Chrome as a shortcut to some URL. It's a Go server that provides a simple
 management interface. To make writing just `go/link` work, right now you need to
-start up Google Chrome with a command line flag. The server's set up right now
-to run locally on port 10123.
+change /etc/hosts.
 
 To run the server:
 
@@ -31,8 +30,7 @@ otherwise you need to startup Google Chrome from the command line.
 
 ## Alternatives:
 
-It seems that `chrome.mdns` isn't a supported API for extensions at the moment
+It seems that `chrome.mdns` isn't a supported Google Chrome extension API at the moment
 per [this issue](https://bugs.chromium.org/p/chromium/issues/detail?id=804945).
 Otherwise it would be nice to do a Chrome extension that could make `go/`
-resolve to a local server through DNS. That way you wouldn't need to start up a
-new Chrome browser.
+resolve to a local server through DNS. That way you wouldn't need to change /etc/hosts.
