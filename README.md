@@ -35,4 +35,4 @@ It seems that `chrome.mdns` isn't a supported API for extensions at the moment
 per [this issue](https://bugs.chromium.org/p/chromium/issues/detail?id=804945).
 Otherwise it would be nice to do a Chrome extension that could make `go/`
 resolve to a local server through DNS. That way you wouldn't need to start up a
-new Chrome browser on the command line or change /etc/hosts.
+new Chrome browser.
