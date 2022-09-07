@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"log"
 	"net"
 	"path"
 	"testing"
@@ -21,6 +22,7 @@ var schema string
 func NewDatabase(ctx context.Context, t *testing.T) *sql.DB {
 	t.Helper()
 	dbPath := path.Join(t.TempDir(), "db.sql")
+	log.Printf("Using db path %q", dbPath)
 	db, err := datastore.SQLite(ctx, dbPath, schema)
 	if err != nil {
 		t.Fatalf("SQLite(%q) failed: %v", dbPath, err)

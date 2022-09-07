@@ -20,11 +20,6 @@ func TestValidLinkName(t *testing.T) {
 			want:     true,
 		},
 		{
-			name:     "bad char",
-			linkName: "<alert>console.log('here')</alert>",
-			want:     false,
-		},
-		{
 			name:     "whitespace",
 			linkName: "foo foo",
 			want:     false,
@@ -45,7 +40,6 @@ func TestCreate(t *testing.T) {
 		name     string
 		linkName string
 		address  string
-		wantErr  bool
 	}
 	testCases := []testCase{
 		{
@@ -63,23 +57,14 @@ func TestCreate(t *testing.T) {
 			linkName: "foo:foo",
 			address:  "http://example.com",
 		},
-		{
-			name:     "escaped name invalid",
-			linkName: "<alert>console.log('hello');</alert>",
-			address:  "http://example.com",
-			wantErr:  true,
-		},
 	}
 	ctx := context.Background()
 	db := golinktest.NewDatabase(ctx, t)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := Create(ctx, db, tc.linkName, tc.address)
-			if !tc.wantErr && err != nil {
+			if err != nil {
 				t.Errorf("Create(%v, %v) returned err=%v, want nil", tc.linkName, tc.address, err)
-			}
-			if tc.wantErr && err == nil {
-				t.Errorf("Create(%v, %v) returned err=nil, want not nil", tc.linkName, tc.address)
 			}
 		})
 	}

@@ -183,8 +183,8 @@ func (gl *GoLink) createHandler(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	ctx := req.Context()
-	name := html.EscapeString(req.PostForm.Get("name"))
-	l := html.EscapeString(req.PostForm.Get("link"))
+	name := escape(req.PostForm.Get("name"))
+	l := escape(req.PostForm.Get("link"))
 	err := link.Create(ctx, gl.db, name, l)
 	if err != nil {
 		switch err {
@@ -193,15 +193,15 @@ func (gl *GoLink) createHandler(resp http.ResponseWriter, req *http.Request) {
 			http.Error(resp, msg, http.StatusConflict)
 			return
 		case link.ErrInvalidLinkName:
-			msg := fmt.Sprintf(`Invalid link name. Must not be "" or contain %q.`, link.BlockChars)
-			http.Error(resp, msg, http.StatusBadRequest)
+			http.Error(resp, err.Error(), http.StatusBadRequest)
 			return
 		case link.ErrUnparseableAddress:
 			msg := fmt.Sprintf("Invalid URL %q: not parseable.", l)
 			http.Error(resp, msg, http.StatusBadRequest)
 			return
 		}
-		http.Error(resp, err.Error(), http.StatusInternalServerError)
+		log.Printf("Unknown error: %v", err)
+		http.Error(resp, "", http.StatusInternalServerError)
 		return
 	}
 	log.Printf("Saved new link: %v -> %v", name, l)
@@ -222,10 +222,11 @@ func (gl *GoLink) readHandler(resp http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		switch err {
 		case link.ErrNotFound:
+			log.Printf("here 1")
 			http.NotFound(resp, req)
 			return
 		case link.ErrInvalidLinkName:
-			http.Error(resp, "Invalid link name.", http.StatusBadRequest)
+			http.Error(resp, err.Error(), http.StatusBadRequest)
 			return
 		}
 		http.Error(resp, err.Error(), http.StatusInternalServerError)
@@ -254,17 +255,17 @@ func (gl *GoLink) updateHandler(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, "Failed to parse form.", http.StatusBadRequest)
 		return
 	}
-	oldName := html.EscapeString(req.PostForm.Get("old_name"))
+	oldName := escape(req.PostForm.Get("old_name"))
 	if oldName == "" {
 		http.Error(resp, "Invalid form: missing the old name of the link.", http.StatusBadRequest)
 		return
 	}
-	reqName := html.EscapeString(req.PostForm.Get("name"))
+	reqName := escape(req.PostForm.Get("name"))
 	if reqName == "" {
 		http.Error(resp, "Invalid form: missing the new name of the link.", http.StatusBadRequest)
 		return
 	}
-	reqLink := html.EscapeString(req.PostForm.Get("link"))
+	reqLink := escape(req.PostForm.Get("link"))
 	if reqLink == "" {
 		http.Error(resp, "Invalid form: missing the link.", http.StatusBadRequest)
 		return
@@ -276,8 +277,7 @@ func (gl *GoLink) updateHandler(resp http.ResponseWriter, req *http.Request) {
 			http.Error(resp, msg, http.StatusBadRequest)
 			return
 		case link.ErrInvalidLinkName:
-			msg := fmt.Sprintf(`Invalid link name %q. Must not be "" or contain %q.`, reqName, link.BlockChars)
-			http.Error(resp, msg, http.StatusBadRequest)
+			http.Error(resp, err.Error(), http.StatusBadRequest)
 			return
 		case link.ErrUnparseableAddress:
 			msg := fmt.Sprintf("Invalid address %q: failed to parse.", reqLink)
@@ -300,7 +300,7 @@ func (gl *GoLink) deleteHandler(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, "Failed to parse form.", http.StatusBadRequest)
 		return
 	}
-	name := html.EscapeString(req.PostForm.Get("name"))
+	name := escape(req.PostForm.Get("name"))
 	if err := link.Delete(ctx, gl.db, name); err != nil {
 		switch err {
 		case link.ErrNotFound:
@@ -326,11 +326,11 @@ func (gl *GoLink) goHandler(resp http.ResponseWriter, req *http.Request) {
 		http.NotFound(resp, req)
 		return
 	}
-	name := split[2]
+	name := escape(split[2])
 	l, ok, err := gl.linkByName(ctx, name)
 	if err != nil {
 		log.Printf("Failed to lookup name=%q: %v", name, err)
-		http.Error(resp, "Failed to lookup name %q.", http.StatusInternalServerError)
+		http.Error(resp, fmt.Sprintf("Failed to lookup name %q.", name), http.StatusInternalServerError)
 		return
 	}
 	if !ok {
@@ -376,4 +376,12 @@ func mustReadFile(b []byte, err error) []byte {
 		panic(err)
 	}
 	return b
+}
+
+// escape makes s safe to put in html and logs.
+func escape(s string) string {
+	s = html.EscapeString(s)
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	return s
 }

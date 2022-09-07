@@ -6,24 +6,20 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"html"
 	"net/url"
-	"strings"
 	"unicode"
 )
 
 var (
 	// ErrAlreadyExists means that a link name already exists in the database.
 	ErrAlreadyExists = errors.New("already exists")
-	// ErrInvalidLinkName means that a link name is not valid. See blockChars.
-	ErrInvalidLinkName = errors.New("invalid name")
+	// ErrInvalidLinkName means that a link name is not valid.
+	ErrInvalidLinkName = errors.New(`invalid name: must not be "" or contain only whitespace characters`)
 	// ErrNotFound means that the name was not found.
 	ErrNotFound = errors.New("not found")
 	// ErrInvalidAddress means that the address was not a parseable URL.
 	ErrUnparseableAddress = errors.New("unparsable")
 )
-
-const BlockChars = "/<>"
 
 // Record is an entry in the database for a name and an address to redirect to.
 type Record struct {
@@ -59,9 +55,6 @@ func Create(ctx context.Context, db *sql.DB, name, address string) error {
 // Read returns a *Record for the link with the given name.
 // Returns ErrNotFound when there's no corresponding record.
 func Read(ctx context.Context, db *sql.DB, name string) (*Record, error) {
-	if !validLinkName(name) {
-		return nil, ErrInvalidLinkName
-	}
 	r, found, err := linkByName(ctx, db, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read link %q: %w", name, err)
@@ -144,15 +137,12 @@ func linkByName(ctx context.Context, db *sql.DB, name string) (*Record, bool, er
 
 // validLinkName returns true if name is valid and false otherwise.
 //
-// A name is invalid if it contains whitespace, contains any of BlockChars, or is the empty string.
+// A name is invalid if it contains whitespace or is the empty string.
 func validLinkName(name string) bool {
-	if html.EscapeString(name) != name {
-		return false
-	}
 	for _, c := range name {
 		if unicode.IsSpace(c) {
 			return false
 		}
 	}
-	return name != "" && !strings.ContainsAny(name, BlockChars)
+	return name != ""
 }

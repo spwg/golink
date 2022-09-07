@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	_ "embed"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -127,4 +129,125 @@ func TestRedirect(t *testing.T) {
 			t.Errorf("GET %q returned location=%q, want %q", addr, got, want)
 		}
 	})
+}
+
+func TestCreate(t *testing.T) {
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	db := golinktest.NewDatabase(ctx, t)
+	l := golinktest.Listen(ctx, t)
+	go golinktest.RunServer(ctx, t, New(db, "golinkservice.com"), l)
+	time.Sleep(500 * time.Millisecond)
+	type testCase struct {
+		name     string
+		linkName string
+		linkAddr string
+		wantName string
+		wantAddr string
+	}
+	testCases := []testCase{
+		{
+			name:     "ok",
+			linkName: "foo",
+			linkAddr: "http://example.com",
+			wantName: "foo",
+			wantAddr: "http://example.com",
+		},
+		{
+			name:     "escape html",
+			linkName: "<alert>foo</alert>",
+			linkAddr: "http://example.com",
+			wantName: "&lt;alert&gt;foo&lt;/alert&gt;",
+			wantAddr: "http://example.com",
+		},
+		{
+			name:     "escape new lines",
+			linkName: "foo\nbar",
+			linkAddr: "http://example.com",
+			wantName: "foobar",
+			wantAddr: "http://example.com",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			form := url.Values{}
+			form.Add("name", tc.linkName)
+			form.Add("link", tc.linkAddr)
+			postPath := "http://" + l.Addr().String() + "/create_golink"
+			client := http.Client{
+				CheckRedirect: func(req *http.Request, via []*http.Request) error {
+					return http.ErrUseLastResponse
+				},
+			}
+			resp, err := client.PostForm(postPath, form)
+			if err != nil {
+				t.Fatalf("Failed to post name=%q and link=%q: %v", tc.linkName, tc.linkAddr, err)
+			}
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Error(err)
+			}
+			s := string(b)
+			if got, want := resp.StatusCode, http.StatusSeeOther; got != want {
+				t.Fatalf("Error posting name=%q and link=%q: got http status code %v, want %v\n%s", tc.linkName, tc.linkAddr, got, want, s)
+			}
+			if _, err := link.Read(ctx, db, tc.wantName); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestRead(t *testing.T) {
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	db := golinktest.NewDatabase(ctx, t)
+	l := golinktest.Listen(ctx, t)
+	go golinktest.RunServer(ctx, t, New(db, "golinkservice.com"), l)
+	time.Sleep(500 * time.Millisecond)
+	type testCase struct {
+		name     string
+		linkName string
+		linkAddr string
+		wantName string
+		wantAddr string
+	}
+	testCases := []testCase{
+		{
+			name:     "ok",
+			linkName: "foo",
+			linkAddr: "http://example.com",
+			wantName: "foo",
+			wantAddr: "http://example.com",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			addEntry(ctx, t, db, tc.linkName, tc.linkAddr)
+			client := http.Client{}
+			getPath := "http://" + l.Addr().String() + "/golink/" + tc.linkName
+			resp, err := client.Get(getPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := string(b)
+			if got, want := resp.StatusCode, http.StatusOK; got != want {
+				t.Errorf("Failed to get %q: status code = %v, want %v", getPath, got, want)
+			}
+			if !strings.Contains(s, tc.wantName) {
+				t.Errorf("Get %q response does not contain name %q, want it to contain %q", getPath, tc.wantName, tc.wantName)
+			}
+			if !strings.Contains(s, tc.wantAddr) {
+				t.Errorf("Get %q response does not contain addr %q, want it to contain %q", getPath, tc.wantAddr, tc.wantAddr)
+			}
+		})
+	}
+}
+
+func init() {
+	log.Default().SetFlags(log.LstdFlags | log.Lshortfile)
 }
